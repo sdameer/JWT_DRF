@@ -126,6 +126,9 @@ class UserResetPasswordSerializers(serializers.Serializer):
         except (DjangoUnicodeDecodeError, CustomUser.DoesNotExist):
             raise serializers.ValidationError('Token is not vallid or expired')
         
+        if not user.check_password(old_password):
+            raise serializers.ValidationError('Old password is incorrect')        
+        
         if not PasswordResetTokenGenerator().check_token(user, token):
                     raise serializers.ValidationError(
                         'Token is not vallid or expired')
