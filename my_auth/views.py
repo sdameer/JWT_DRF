@@ -2,7 +2,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated , AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .serializers import *
@@ -70,6 +70,8 @@ class UserChangePasswordView(APIView):
 
 
 class UserResetPasswordEmailView(APIView):
+    permission_classes = [AllowAny]   
+    authentication_classes = []
     def post(self , request):
         ser = UserResetPasswordEmailSerializers(data = request.data)
         if ser.is_valid(raise_exception=True):
