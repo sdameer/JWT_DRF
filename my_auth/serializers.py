@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.utils.http import urlsafe_base64_decode , urlsafe_base64_encode
 from django.utils.encoding import smart_str , force_bytes , DjangoUnicodeDecodeError
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.contrib.auth.password_validation import validate_password
 from .models import CustomUser
 
 
@@ -93,38 +94,47 @@ class UserResetPasswordEmailSerializers(serializers.ModelSerializer):
         
 
 
-class UserResetPasswordSerializers(serializers.ModelSerializer):
-
+class UserResetPasswordSerializers(serializers.Serializer):
+    old_password = serializers.CharField(
+        max_length=255, style={'input_type': 'password'}, write_only=True)    
     password = serializers.CharField(
-        write_only=True, style={"input_type": "password"})
+        max_length=255, style={'input_type': 'password'}, write_only=True)
     password2 = serializers.CharField(
-        write_only=True, style={"input_type": "password"})
+        max_length=255, style={'input_type': 'password'}, write_only=True)
 
     class Meta:
-        model = CustomUser
-        fields = ['password', 'password2']
+        fields = ['old_password','password', 'password2']
 
     def validate(self, attrs):
-        password = attrs.get("password")
-        password2 = attrs.get("password2")
-        uid = self.context.get('uid')
-        token = self.context.get('token')
-        user_id = smart_str(urlsafe_base64_decode(uid)) # type: ignore
-        user = CustomUser.objects.get(id = user_id)
+        old_password = attrs.get('old_password')
+        password = attrs.get('password')
+        password2 = attrs.get('password2')
+        
         
         if password != password2:
-            raise serializers.ValidationError("passwords does not match")
+            raise serializers.ValidationError(
+                'Password and confirm password doesnt match')
+            
+        # password len > 8 and [A-Z a-z 0-9]
+        validate_password(password)
+            
+        uid = self.context.get('uid')
+        token = self.context.get('token')
+        try : 
+            id = smart_str(urlsafe_base64_decode(uid))  # type: ignore
+            user = CustomUser.objects.get(id=id)        
+        except (DjangoUnicodeDecodeError, CustomUser.DoesNotExist):
+            raise serializers.ValidationError('Token is not vallid or expired')
+        
+        if not user.check_password(old_password):
+            raise serializers.ValidationError('Old password is incorrect')        
+        
+        if not PasswordResetTokenGenerator().check_token(user, token):
+                    raise serializers.ValidationError(
+                        'Token is not vallid or expired')
+        
+        user.set_password(password)  # type: ignore
+        user.save()  # type: ignore
+        return attrs
 
-                
-        try :
-            if not PasswordResetTokenGenerator().check_token(user , token):
-                raise serializers.ValidationError("Invalid Token")
-            user.set_password(password) # type: ignore
-            user.save() # type: ignore
-            return attrs
-        except (DjangoUnicodeDecodeError , CustomUser.DoesNotExist) as e :
-            PasswordResetTokenGenerator().check_token(user , token)
-            raise serializers.ValidationError(e)
-    
-    
     
